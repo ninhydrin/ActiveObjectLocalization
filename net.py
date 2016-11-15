@@ -1,9 +1,12 @@
+# -*- coding: utf-8 -*-
 import chainer
 import chainer.functions as F
 import chainer.links as L
 
 
+
 class Alex(chainer.Chain):
+
     insize = 227
 
     def __init__(self):
@@ -18,20 +21,21 @@ class Alex(chainer.Chain):
             fc8=L.Linear(4096, 1000),
         )
         self.train = False
+        self.fc6_dropout_rate=0.5
+        self.fc7_dropout_rate=0.5
+
 
     def __call__(self, x):
-        h = F.max_pooling_2d(F.relu(
-            F.local_response_normalization(self.conv1(x))), 3, stride=2)
-        h = F.max_pooling_2d(F.relu(
-            F.local_response_normalization(self.conv2(h))), 3, stride=2)
+
+        h = F.max_pooling_2d(
+            F.local_response_normalization(F.relu(self.conv1(x)),alpha=0.00002,k=1), 3, stride=2)
+        h = F.max_pooling_2d(
+            F.local_response_normalization(F.relu(self.conv2(h)),alpha=0.00002,k=1), 3, stride=2)
         h = F.relu(self.conv3(h))
         h = F.relu(self.conv4(h))
         h = F.max_pooling_2d(F.relu(self.conv5(h)), 3, stride=2)
-        self.feat = F.dropout(F.relu(self.fc6(h)), train=self.train)
-        #self.loss = F.softmax_cross_entropy(h, t)
-        #self.accuracy = F.accuracy(h, t)
-        return self.feat
-
+        h = F.dropout(F.relu(self.fc6(h)), ratio=self.fc6_dropout_rate, train=self.train)
+        return h
 
 class DQN(chainer.Chain):
     insize = 4096 + 9 * 10
@@ -45,15 +49,15 @@ class DQN(chainer.Chain):
         self.train = True
 
     def __call__(self, x, y):
-        h = F.relu(self.fc1(x))
-        h = F.dropout(F.relu(self.fc2(h)), train=self.train)
-        h = F.dropout(F.relu(self.fc3(h)), train=self.train)
-        self.loss = F.mean_squared_error(h, y)  # F.softmax_cross_entropy(h,y)
-        #self.accuracy = F.accuracy(h, y)
+        h = F.dropout(F.tanh(self.fc1(x)), train=self.train)
+        h = F.dropout(F.tanh(self.fc2(h)), train=self.train)
+        h = F.tanh(self.fc3(h))
+
+        self.loss = F.mean_squared_error(h, y)
         return self.loss
 
     def action(self, x):
-        h = F.relu(self.fc1(x))
-        h = F.dropout(F.relu(self.fc2(h)), train=self.train)
-        h = F.dropout(F.relu(self.fc3(h)), train=self.train)
+        h = F.tanh(self.fc1(x))
+        h = F.tanh(self.fc2(h))
+        h = F.tanh(self.fc3(h))
         return F.softmax(h)
